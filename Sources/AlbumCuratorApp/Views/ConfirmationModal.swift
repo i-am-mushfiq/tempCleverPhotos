@@ -89,5 +89,13 @@ public struct ConfirmationModal: View {
             .padding(.bottom, 24)
         }
         .background(Color.appSystemGroupedBackground.ignoresSafeArea())
+        .alert("Removal Failed", isPresented: Binding(
+            get: { viewModel.errorMessage != nil },
+            set: { if !$0 { viewModel.errorMessage = nil } }
+        )) {
+            Button("OK") { viewModel.errorMessage = nil }
+        } message: {
+            Text(viewModel.errorMessage ?? "")
+        }
     }
 }

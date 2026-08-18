@@ -1,69 +1,161 @@
 import Foundation
+import Vision
+import CoreImage
+import UIKit
+import Photos
+
+// MARK: - Protocol
 
 public protocol VisionAnalysisEngineProtocol {
-    /// Analyzes assets and clusters them into groups of visually/temporally similar photos with best-shot recommendations.
+    /// Analyzes assets and clusters them by real visual similarity.
+    /// Uses VNFeaturePrintObservation for perceptual comparison and CoreImage for quality signals.
     func analyzeAndCluster(
         assets: [PhotoAsset],
         cachedAnalyses: [String: PhotoAnalysis],
         mode: SimilarityMode,
         progressHandler: @escaping (Int, Int, String) -> Void
     ) async -> (clusters: [PhotoCluster], updatedAnalyses: [String: PhotoAnalysis])
-    
-    /// Computes quality analysis for a single photo asset.
+
+    /// Computes quality analysis for a single photo asset (synchronous fallback, used in tests).
     func analyzeSingleAsset(_ asset: PhotoAsset) -> PhotoAnalysis
 }
 
+// MARK: - Engine
+
 public class VisionAnalysisEngine: VisionAnalysisEngineProtocol {
+
+    private let currentVersion = "2.0.0"
+
     public init() {}
-    
-    private func deterministicHash(_ string: String) -> UInt64 {
-        var hash: UInt64 = 5381
-        for byte in string.utf8 {
-            hash = 127 &* hash &+ UInt64(byte)
+
+    // MARK: - Thumbnail Loading
+
+    /// Loads a small CGImage thumbnail for Vision analysis via PHImageManager.
+    private func loadThumbnail(for asset: PhotoAsset) async -> CGImage? {
+        let results = PHAsset.fetchAssets(withLocalIdentifiers: [asset.localIdentifier], options: nil)
+        guard let phAsset = results.firstObject else { return nil }
+
+        return await withCheckedContinuation { continuation in
+            let options = PHImageRequestOptions()
+            options.deliveryMode = .fastFormat      // Fastest available quality
+            options.isNetworkAccessAllowed = false   // On-device only
+            options.isSynchronous = false
+            options.resizeMode = .fast
+
+            PHImageManager.default().requestImage(
+                for: phAsset,
+                targetSize: CGSize(width: 224, height: 224),
+                contentMode: .aspectFit,
+                options: options
+            ) { image, _ in
+                continuation.resume(returning: image?.cgImage)
+            }
         }
-        return hash
     }
-    
+
+    // MARK: - Vision Analysis
+
+    /// Generates a VNFeaturePrintObservation for perceptual comparison.
+    private func generateFeaturePrint(for cgImage: CGImage) -> VNFeaturePrintObservation? {
+        let request = VNGenerateImageFeaturePrintRequest()
+        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+        try? handler.perform([request])
+        return request.results?.first as? VNFeaturePrintObservation
+    }
+
+    /// Counts detected faces via VNDetectFaceRectanglesRequest.
+    private func detectFaces(in cgImage: CGImage) -> Int {
+        let request = VNDetectFaceRectanglesRequest()
+        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+        try? handler.perform([request])
+        return request.results?.count ?? 0
+    }
+
+    // MARK: - CoreImage Quality Signals
+
+    /// Sharpness: brightness of CIEdges output.
+    /// Blurry images have weak edges → low brightness → low score.
+    private func computeSharpness(cgImage: CGImage) -> Double {
+        let ciImage = CIImage(cgImage: cgImage)
+        let context = CIContext(options: [.useSoftwareRenderer: false])
+
+        guard let edgesFilter = CIFilter(name: "CIEdges") else { return 0.5 }
+        edgesFilter.setValue(ciImage, forKey: kCIInputImageKey)
+        edgesFilter.setValue(5.0, forKey: kCIInputIntensityKey)
+        guard let edgeOutput = edgesFilter.outputImage else { return 0.5 }
+
+        return averageLuminance(of: edgeOutput, extent: ciImage.extent, context: context)
+    }
+
+    /// Exposure balance: how close the average luminance is to the ideal mid-tone (0.5).
+    /// Perfect exposure → score near 1.0. Very dark or blown-out → score near 0.0.
+    private func computeExposure(cgImage: CGImage) -> Double {
+        let ciImage = CIImage(cgImage: cgImage)
+        let context = CIContext(options: [.useSoftwareRenderer: false])
+
+        // Desaturate to measure luminance only
+        guard let colorFilter = CIFilter(name: "CIColorControls") else { return 0.5 }
+        colorFilter.setValue(ciImage, forKey: kCIInputImageKey)
+        colorFilter.setValue(0.0, forKey: kCIInputSaturationKey)
+        guard let grayOutput = colorFilter.outputImage else { return 0.5 }
+
+        let luminance = averageLuminance(of: grayOutput, extent: ciImage.extent, context: context)
+        // Penalise deviation from ideal 0.5: deviation of 0.5 → score 0.0
+        return max(0.0, 1.0 - (abs(luminance - 0.5) * 2.0))
+    }
+
+    /// Renders a CIImage to a 1×1 pixel and returns its average luminance (0.0–1.0).
+    private func averageLuminance(of image: CIImage, extent: CGRect, context: CIContext) -> Double {
+        guard let avgFilter = CIFilter(name: "CIAreaAverage") else { return 0.5 }
+        avgFilter.setValue(image, forKey: kCIInputImageKey)
+        avgFilter.setValue(CIVector(cgRect: extent), forKey: kCIInputExtentKey)
+        guard let avgOutput = avgFilter.outputImage else { return 0.5 }
+
+        var pixel = [UInt8](repeating: 0, count: 4)
+        context.render(
+            avgOutput,
+            toBitmap: &pixel,
+            rowBytes: 4,
+            bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
+            format: .RGBA8,
+            colorSpace: CGColorSpaceCreateDeviceRGB()
+        )
+        // BT.601 luminance from RGB
+        let r = Double(pixel[0]) / 255.0
+        let g = Double(pixel[1]) / 255.0
+        let b = Double(pixel[2]) / 255.0
+        return 0.299 * r + 0.587 * g + 0.114 * b
+    }
+
+    // MARK: - Feature Print Serialization
+
+    /// Serializes a VNFeaturePrintObservation to Data for disk caching.
+    private func serializeFeaturePrint(_ observation: VNFeaturePrintObservation) -> Data? {
+        return try? NSKeyedArchiver.archivedData(withRootObject: observation, requiringSecureCoding: true)
+    }
+
+    /// Deserializes a VNFeaturePrintObservation from cached Data.
+    private func deserializeFeaturePrint(from data: Data) -> VNFeaturePrintObservation? {
+        return try? NSKeyedUnarchiver.unarchivedObject(ofClass: VNFeaturePrintObservation.self, from: data)
+    }
+
+    // MARK: - Single Asset (Synchronous Fallback)
+
+    /// Synchronous stub — used in tests or when no thumbnail is available.
+    /// Production analysis goes through analyzeAndCluster.
     public func analyzeSingleAsset(_ asset: PhotoAsset) -> PhotoAnalysis {
-        // Deterministic hash derived from asset ID string bytes (stable across process runs)
-        let hashSeed = deterministicHash(asset.id)
-        let dHash = hashSeed ^ 0xA5A5A5A5A5A5A5A5
-        
-        // Generate pseudo-feature vector
-        var vector: [Float] = []
-        let seed = Float(hashSeed % 1000) / 1000.0
-        for i in 0..<32 {
-            let val = sin(seed * 12.9898 + Float(i) * 0.1) * 43758.5453
-            vector.append(abs(val - floor(val)))
-        }
-        
-        // Technical quality signals
-        let sharpness = 0.5 + 0.45 * sin(Double(hashSeed % 100) * 0.1)
-        let exposure = 0.6 + 0.35 * cos(Double(hashSeed % 50) * 0.2)
-        let noise = 0.85 + 0.1 * sin(Double(hashSeed % 30) * 0.15)
-        
-        // Subject signals
-        let faces = Int(hashSeed % 4) // 0 to 3 faces
-        let eyesOpen = faces > 0 ? (0.7 + 0.3 * sin(Double(hashSeed % 20) * 0.5)) : 1.0
-        let smile = 0.4 + 0.5 * cos(Double(hashSeed % 15) * 0.3)
-        
-        // Aesthetic signals
-        let composition = 0.65 + 0.3 * sin(Double(hashSeed % 80) * 0.05)
-        
         return PhotoAnalysis(
             assetID: asset.id,
-            perceptualHash: dHash,
-            featureVector: vector,
-            sharpnessScore: sharpness,
-            exposureBalance: exposure,
-            noiseScore: noise,
-            faceCount: faces,
-            eyesOpenRatio: eyesOpen,
-            smileProminence: smile,
-            compositionScore: composition
+            featurePrintData: nil,
+            sharpnessScore: 0.5,
+            exposureBalance: 0.5,
+            faceCount: 0,
+            analysisVersion: currentVersion
         )
     }
-    
+
+    // MARK: - Main Entry Point
+
     public func analyzeAndCluster(
         assets: [PhotoAsset],
         cachedAnalyses: [String: PhotoAnalysis],
@@ -72,129 +164,156 @@ public class VisionAnalysisEngine: VisionAnalysisEngineProtocol {
     ) async -> (clusters: [PhotoCluster], updatedAnalyses: [String: PhotoAnalysis]) {
         let total = assets.count
         guard total > 0 else { return ([], cachedAnalyses) }
-        
+
         var analyses = cachedAnalyses
-        
-        // Phase 1: Feature Extraction / Analysis (Incremental Cache reuse)
+
+        // ── Phase 1: Feature Extraction ──────────────────────────────────────────
+        // Re-analyse only assets missing from cache or from an older version.
         for (index, asset) in assets.enumerated() {
-            if analyses[asset.id] == nil {
-                analyses[asset.id] = analyzeSingleAsset(asset)
+            let needsAnalysis = analyses[asset.id].map { $0.analysisVersion != currentVersion } ?? true
+
+            if needsAnalysis {
+                if let cgImage = await loadThumbnail(for: asset) {
+                    let featurePrint = generateFeaturePrint(for: cgImage)
+                    let faceCount   = detectFaces(in: cgImage)
+                    let sharpness   = computeSharpness(cgImage: cgImage)
+                    let exposure    = computeExposure(cgImage: cgImage)
+                    let fpData      = featurePrint.flatMap { serializeFeaturePrint($0) }
+
+                    analyses[asset.id] = PhotoAnalysis(
+                        assetID: asset.id,
+                        featurePrintData: fpData,
+                        sharpnessScore: sharpness,
+                        exposureBalance: exposure,
+                        faceCount: faceCount,
+                        analysisVersion: currentVersion
+                    )
+                } else {
+                    // Thumbnail unavailable (e.g. iCloud-only asset offline) — neutral scores
+                    analyses[asset.id] = PhotoAnalysis(
+                        assetID: asset.id,
+                        featurePrintData: nil,
+                        sharpnessScore: 0.5,
+                        exposureBalance: 0.5,
+                        faceCount: 0,
+                        analysisVersion: currentVersion
+                    )
+                }
             }
+
             if index % 5 == 0 || index == total - 1 {
-                progressHandler(index + 1, total, "Analyzing photo quality & visual features (\(index + 1)/\(total))...")
+                progressHandler(
+                    index + 1, total,
+                    "Analyzing photo quality & visual features (\(index + 1)/\(total))..."
+                )
             }
         }
-        
+
         progressHandler(total, total, "Clustering similar photos...")
-        
-        // Phase 2: Candidate Generation (Time Window Filtering)
-        let sortedAssets = assets.sorted { ($0.creationDate ?? Date.distantPast) < ($1.creationDate ?? Date.distantPast) }
-        
+
+        // ── Phase 2: Reconstruct feature prints for clustering ────────────────────
+        var featurePrints: [String: VNFeaturePrintObservation] = [:]
+        for asset in assets {
+            if let data = analyses[asset.id]?.featurePrintData,
+               let fp = deserializeFeaturePrint(from: data) {
+                featurePrints[asset.id] = fp
+            }
+        }
+
+        // ── Phase 3: Time-window + feature-print clustering ───────────────────────
+        let sortedAssets = assets.sorted {
+            ($0.creationDate ?? .distantPast) < ($1.creationDate ?? .distantPast)
+        }
         var unvisited = Set(sortedAssets.map { $0.id })
         var assetMap: [String: PhotoAsset] = [:]
         for a in sortedAssets { assetMap[a.id] = a }
-        
+
         var clusters: [PhotoCluster] = []
-        
+        let distanceThreshold = mode.featurePrintDistanceThreshold
+        let timeWindow        = mode.maxTimeIntervalSeconds
+
         for asset in sortedAssets {
             guard unvisited.contains(asset.id) else { continue }
-            
-            var currentClusterIDs = [asset.id]
+
+            var clusterIDs = [asset.id]
             unvisited.remove(asset.id)
-            
-            let baseAnalysis = analyses[asset.id]!
-            let baseDate = asset.creationDate ?? Date()
-            
+
+            let baseDate  = asset.creationDate ?? Date()
+            let basePrint = featurePrints[asset.id]
+
             for candidate in sortedAssets {
                 guard unvisited.contains(candidate.id) else { continue }
+
                 let candDate = candidate.creationDate ?? Date()
-                
                 let timeDiff = abs(candDate.timeIntervalSince(baseDate))
-                if timeDiff <= mode.maxTimeIntervalSeconds {
-                    let candAnalysis = analyses[candidate.id]!
-                    let similarity = computeSimilarity(baseAnalysis, candAnalysis)
-                    
-                    // In test / simulation environment, photos in close time windows are clustered
-                    if similarity >= Double(mode.featureSimilarityThreshold) || timeDiff <= 5.0 {
-                        currentClusterIDs.append(candidate.id)
-                        unvisited.remove(candidate.id)
-                    }
+                guard timeDiff <= timeWindow else { continue }
+
+                var isSimilar = false
+                if let fp1 = basePrint, let fp2 = featurePrints[candidate.id] {
+                    // Real Vision similarity comparison
+                    var distance: Float = 1.0
+                    try? fp1.computeDistance(&distance, to: fp2)
+                    isSimilar = distance < distanceThreshold
+                } else {
+                    // No feature print available: fallback to burst-only (< 5 seconds)
+                    isSimilar = timeDiff < 5.0
+                }
+
+                if isSimilar {
+                    clusterIDs.append(candidate.id)
+                    unvisited.remove(candidate.id)
                 }
             }
-            
-            // Only create cluster if 2 or more similar photos exist
-            if currentClusterIDs.count > 1 {
+
+            // Only emit a cluster if 2+ similar photos were found
+            if clusterIDs.count > 1 {
                 let cluster = rankAndCreateCluster(
-                    assetIDs: currentClusterIDs,
+                    assetIDs: clusterIDs,
                     analyses: analyses,
-                    assetMap: assetMap,
-                    mode: mode
+                    assetMap: assetMap
                 )
                 clusters.append(cluster)
             }
         }
-        
+
         return (clusters, analyses)
     }
-    
-    private func computeSimilarity(_ a: PhotoAnalysis, _ b: PhotoAnalysis) -> Double {
-        // Hamming distance on perceptual hash
-        let hashDistance = (a.perceptualHash ^ b.perceptualHash).nonzeroBitCount
-        let hashSim = max(0.0, 1.0 - (Double(hashDistance) / 64.0))
-        
-        // Cosine similarity on feature vector
-        var dotProduct: Float = 0.0
-        var normA: Float = 0.0
-        var normB: Float = 0.0
-        
-        let count = min(a.featureVector.count, b.featureVector.count)
-        if count > 0 {
-            for i in 0..<count {
-                dotProduct += a.featureVector[i] * b.featureVector[i]
-                normA += a.featureVector[i] * a.featureVector[i]
-                normB += b.featureVector[i] * b.featureVector[i]
-            }
-            let denom = (sqrt(normA) * sqrt(normB))
-            let vectorSim = denom > 0 ? (dotProduct / denom) : 0.0
-            return (Double(vectorSim) * 0.7) + (hashSim * 0.3)
-        }
-        
-        return hashSim
-    }
-    
+
+    // MARK: - Cluster Ranking
+
     private func rankAndCreateCluster(
         assetIDs: [String],
         analyses: [String: PhotoAnalysis],
-        assetMap: [String: PhotoAsset],
-        mode: SimilarityMode
+        assetMap: [String: PhotoAsset]
     ) -> PhotoCluster {
-        // Rank by overall quality score
+        // Sort descending by overall quality score
         let sortedByQuality = assetIDs.sorted { id1, id2 in
-            let q1 = analyses[id1]?.overallQualityScore ?? 0.0
-            let q2 = analyses[id2]?.overallQualityScore ?? 0.0
-            return q1 > q2
+            (analyses[id1]?.overallQualityScore ?? 0.0) > (analyses[id2]?.overallQualityScore ?? 0.0)
         }
-        
-        let bestID = sortedByQuality.first!
-        let bestQuality = analyses[bestID]?.overallQualityScore ?? 0.0
-        let secondQuality = sortedByQuality.count > 1 ? (analyses[sortedByQuality[1]]?.overallQualityScore ?? 0.0) : 0.0
-        
+
+        let bestID        = sortedByQuality.first!
+        let bestQuality   = analyses[bestID]?.overallQualityScore ?? 0.0
+        let secondQuality = sortedByQuality.count > 1
+            ? (analyses[sortedByQuality[1]]?.overallQualityScore ?? 0.0)
+            : 0.0
+
+        // Default: keep only the best shot
         var keepers = [bestID]
-        
-        // Multi-keeper heuristic: If second shot is within 2% quality and has different face parameters or Live Photo preference
-        if sortedByQuality.count > 2, (bestQuality - secondQuality) < 0.02 {
+
+        // Special case: if #2 is a Live Photo companion within 2% quality, keep both
+        if sortedByQuality.count > 1 {
             let secondID = sortedByQuality[1]
-            if let a1 = analyses[bestID], let a2 = analyses[secondID], a1.faceCount != a2.faceCount {
+            let gap = bestQuality - secondQuality
+            if gap < 0.02, let asset = assetMap[secondID], asset.isLivePhoto {
                 keepers.append(secondID)
             }
         }
-        
+
         let candidatesForRemoval = assetIDs.filter { !keepers.contains($0) }
-        
-        // Confidence calculation (Precision over recall)
+
+        // Confidence is driven by quality gap: clear winner → high confidence recommendation
         let qualityGap = bestQuality - secondQuality
         let confidence: ClusterConfidence
-        
         if assetIDs.count >= 2 && qualityGap > 0.08 {
             confidence = .high
         } else if qualityGap > 0.03 {
@@ -202,13 +321,13 @@ public class VisionAnalysisEngine: VisionAnalysisEngineProtocol {
         } else {
             confidence = .low
         }
-        
+
         return PhotoCluster(
             assetIDs: assetIDs,
             recommendedKeepers: keepers,
             candidatesForRemoval: candidatesForRemoval,
             confidence: confidence,
-            similarityScore: 0.85 + (qualityGap * 0.5)
+            similarityScore: Double(max(0.0, 1.0 - qualityGap))
         )
     }
 }

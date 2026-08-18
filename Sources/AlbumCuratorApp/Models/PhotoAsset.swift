@@ -12,7 +12,7 @@ public struct PhotoAsset: Identifiable, Hashable, Codable {
     public let isLivePhoto: Bool
     public let isFavorite: Bool
     public var customLabel: String?
-    
+
     public init(
         id: String = UUID().uuidString,
         localIdentifier: String,
@@ -32,32 +32,39 @@ public struct PhotoAsset: Identifiable, Hashable, Codable {
         self.isFavorite = isFavorite
         self.customLabel = customLabel
     }
-    
+
     public var aspectRatio: Double {
         guard pixelHeight > 0 else { return 1.0 }
         return Double(pixelWidth) / Double(pixelHeight)
     }
 }
 
-/// Lightweight representation of a Photos Album collection.
+/// Lightweight representation of a user-created Photos Album collection.
+/// Smart albums (Recents, Favorites, etc.) are excluded from the app's album list
+/// because PHAssetCollectionChangeRequest returns nil for read-only collections,
+/// making them unmutable.
 public struct PhotoAlbum: Identifiable, Hashable, Codable {
     public let id: String
     public let title: String
     public let assetCount: Int
     public var thumbnailAssetID: String?
     public var lastAnalyzedDate: Date?
-    
+    /// True for PHAssetCollectionType.smartAlbum — read-only, cannot be mutated.
+    public let isReadOnly: Bool
+
     public init(
         id: String,
         title: String,
         assetCount: Int,
         thumbnailAssetID: String? = nil,
-        lastAnalyzedDate: Date? = nil
+        lastAnalyzedDate: Date? = nil,
+        isReadOnly: Bool = false
     ) {
         self.id = id
         self.title = title
         self.assetCount = assetCount
         self.thumbnailAssetID = thumbnailAssetID
         self.lastAnalyzedDate = lastAnalyzedDate
+        self.isReadOnly = isReadOnly
     }
 }

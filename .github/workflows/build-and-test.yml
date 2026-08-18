@@ -42,6 +42,16 @@ jobs:
           echo "SUCCESS: Non-destructive architectural invariant verified."
         fi
 
+    - name: Verify Real Vision Engine Is Wired
+      run: |
+        echo "Verifying VNGenerateImageFeaturePrintRequest is present (real AI, not fake engine)."
+        if ! grep -rn "VNGenerateImageFeaturePrintRequest" Sources/ ; then
+          echo "ERROR: Real Vision analysis not found — fake engine may have been reverted."
+          exit 1
+        else
+          echo "SUCCESS: VNGenerateImageFeaturePrintRequest confirmed in codebase."
+        fi
+
     - name: Create IPA Package
       run: |
         rm -rf Payload AlbumCurator-iOS.ipa

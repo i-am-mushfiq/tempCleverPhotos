@@ -13,11 +13,11 @@ public protocol PhotoKitServiceProtocol {
     func requestAuthorization() async -> PhotosAuthorizationState
     func fetchAlbums() async -> [PhotoAlbum]
     func fetchAssets(in albumID: String) async -> [PhotoAsset]
-    
+
     /// Non-destructive mutation: Removes specified assets from the album.
     /// SAFE INVARIANT: Never deletes assets from the user's Photos Library.
     func removeAssetsFromAlbum(assetIDs: [String], albumID: String) async throws -> Bool
-    
+
     /// Re-adds assets back to the specified album for undo operations.
     func restoreAssetsToAlbum(assetIDs: [String], albumID: String) async throws -> Bool
 }
@@ -25,83 +25,83 @@ public protocol PhotoKitServiceProtocol {
 /// Concrete PhotoKit service communicating with Apple's PhotoKit framework.
 public class PhotoKitService: PhotoKitServiceProtocol {
     public init() {}
-    
+
     public func checkAuthorizationStatus() -> PhotosAuthorizationState {
         let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
         switch status {
-        case .authorized: return .authorized
-        case .limited: return .limited
-        case .denied, .restricted: return .denied
-        case .notDetermined: return .notDetermined
-        @unknown default: return .denied
+        case .authorized:           return .authorized
+        case .limited:              return .limited
+        case .denied, .restricted:  return .denied
+        case .notDetermined:        return .notDetermined
+        @unknown default:           return .denied
         }
     }
 
     public func requestAuthorization() async -> PhotosAuthorizationState {
         let status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
         switch status {
-        case .authorized: return .authorized
-        case .limited: return .limited
-        case .denied, .restricted: return .denied
-        case .notDetermined: return .notDetermined
-        @unknown default: return .denied
+        case .authorized:           return .authorized
+        case .limited:              return .limited
+        case .denied, .restricted:  return .denied
+        case .notDetermined:        return .notDetermined
+        @unknown default:           return .denied
         }
     }
-    
+
+    /// Fetches only user-created albums (PHAssetCollectionType.album).
+    /// Smart albums (Recents, Favorites, All Photos, etc.) are intentionally excluded:
+    /// they are read-only collections — PHAssetCollectionChangeRequest returns nil for them,
+    /// causing silent removal failures.
     public func fetchAlbums() async -> [PhotoAlbum] {
         return await withCheckedContinuation { continuation in
             var albums: [PhotoAlbum] = []
-            
-            let userAlbums = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .any, options: nil)
+
+            let userAlbums = PHAssetCollection.fetchAssetCollections(
+                with: .album,
+                subtype: .any,
+                options: nil
+            )
             userAlbums.enumerateObjects { collection, _, _ in
                 let assets = PHAsset.fetchAssets(in: collection, options: nil)
-                let coverID = assets.firstObject?.localIdentifier
                 let album = PhotoAlbum(
                     id: collection.localIdentifier,
                     title: collection.localizedTitle ?? "Untitled Album",
                     assetCount: assets.count,
-                    thumbnailAssetID: coverID
+                    thumbnailAssetID: assets.firstObject?.localIdentifier,
+                    isReadOnly: false
                 )
                 albums.append(album)
             }
-            
-            let smartAlbums = PHAssetCollection.fetchAssetCollections(with: .smartAlbum, subtype: .any, options: nil)
-            smartAlbums.enumerateObjects { collection, _, _ in
-                let assets = PHAsset.fetchAssets(in: collection, options: nil)
-                if assets.count > 0 {
-                    let coverID = assets.firstObject?.localIdentifier
-                    let album = PhotoAlbum(
-                        id: collection.localIdentifier,
-                        title: collection.localizedTitle ?? "Smart Album",
-                        assetCount: assets.count,
-                        thumbnailAssetID: coverID
-                    )
-                    albums.append(album)
-                }
-            }
-            
+
             continuation.resume(returning: albums)
         }
     }
-    
+
     public func fetchAssets(in albumID: String) async -> [PhotoAsset] {
         return await withCheckedContinuation { continuation in
-            let collections = PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: [albumID], options: nil)
+            let collections = PHAssetCollection.fetchAssetCollections(
+                withLocalIdentifiers: [albumID],
+                options: nil
+            )
             guard let collection = collections.firstObject else {
                 continuation.resume(returning: [])
                 return
             }
-            
+
             let fetchOptions = PHFetchOptions()
-            fetchOptions.predicate = NSPredicate(format: "mediaType == %d", PHAssetMediaType.image.rawValue)
-            fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
-            
+            fetchOptions.predicate = NSPredicate(
+                format: "mediaType == %d", PHAssetMediaType.image.rawValue
+            )
+            fetchOptions.sortDescriptors = [
+                NSSortDescriptor(key: "creationDate", ascending: false)
+            ]
+
             let phAssets = PHAsset.fetchAssets(in: collection, options: fetchOptions)
             var assets: [PhotoAsset] = []
-            
+
             phAssets.enumerateObjects { asset, _, _ in
                 let isLivePhoto = asset.mediaSubtypes.contains(.photoLive)
-                let item = PhotoAsset(
+                assets.append(PhotoAsset(
                     id: asset.localIdentifier,
                     localIdentifier: asset.localIdentifier,
                     creationDate: asset.creationDate,
@@ -109,28 +109,32 @@ public class PhotoKitService: PhotoKitServiceProtocol {
                     pixelHeight: asset.pixelHeight,
                     isLivePhoto: isLivePhoto,
                     isFavorite: asset.isFavorite
-                )
-                assets.append(item)
+                ))
             }
-            
+
             continuation.resume(returning: assets)
         }
     }
-    
+
     /// SAFELY removes assets from the designated album WITHOUT deleting them from PHPhotoLibrary.
     public func removeAssetsFromAlbum(assetIDs: [String], albumID: String) async throws -> Bool {
         return try await withCheckedThrowingContinuation { continuation in
-            let collections = PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: [albumID], options: nil)
+            let collections = PHAssetCollection.fetchAssetCollections(
+                withLocalIdentifiers: [albumID],
+                options: nil
+            )
             guard let collection = collections.firstObject else {
                 continuation.resume(returning: false)
                 return
             }
-            
+
             let assetsToFetch = PHAsset.fetchAssets(withLocalIdentifiers: assetIDs, options: nil)
-            
+
             PHPhotoLibrary.shared().performChanges({
-                guard let albumChangeRequest = PHAssetCollectionChangeRequest(for: collection) else { return }
-                // ONLY remove from album - DO NOT call asset deletion APIs!
+                guard let albumChangeRequest = PHAssetCollectionChangeRequest(for: collection) else {
+                    return
+                }
+                // ONLY remove from album — DO NOT call any asset deletion APIs
                 albumChangeRequest.removeAssets(assetsToFetch)
             }) { success, error in
                 if let error = error {
@@ -141,20 +145,25 @@ public class PhotoKitService: PhotoKitServiceProtocol {
             }
         }
     }
-    
+
     /// Re-adds assets to the album (Undo operation).
     public func restoreAssetsToAlbum(assetIDs: [String], albumID: String) async throws -> Bool {
         return try await withCheckedThrowingContinuation { continuation in
-            let collections = PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: [albumID], options: nil)
+            let collections = PHAssetCollection.fetchAssetCollections(
+                withLocalIdentifiers: [albumID],
+                options: nil
+            )
             guard let collection = collections.firstObject else {
                 continuation.resume(returning: false)
                 return
             }
-            
+
             let assetsToFetch = PHAsset.fetchAssets(withLocalIdentifiers: assetIDs, options: nil)
-            
+
             PHPhotoLibrary.shared().performChanges({
-                guard let albumChangeRequest = PHAssetCollectionChangeRequest(for: collection) else { return }
+                guard let albumChangeRequest = PHAssetCollectionChangeRequest(for: collection) else {
+                    return
+                }
                 albumChangeRequest.addAssets(assetsToFetch)
             }) { success, error in
                 if let error = error {

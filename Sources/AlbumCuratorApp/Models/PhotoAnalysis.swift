@@ -1,35 +1,35 @@
 import Foundation
 
 /// Detailed analysis output for a photo asset combining perceptual, visual, and quality signals.
+/// analysisVersion "2.0.0" uses real Vision.framework feature prints; older cached entries are discarded.
 public struct PhotoAnalysis: Identifiable, Hashable, Codable {
     public var id: String { assetID }
     public let assetID: String
-    
-    // Perceptual & Visual Features
-    public let perceptualHash: UInt64
-    public let featureVector: [Float]
-    
-    // Technical Signals
-    public let sharpnessScore: Double   // Laplacian variance / gradient magnitude (0.0 to 1.0)
-    public let exposureBalance: Double  // Histogram exposure quality (0.0 to 1.0)
-    public let noiseScore: Double       // High-frequency noise estimation (0.0 to 1.0, higher is cleaner)
-    
-    // Subject Signals
+
+    /// Serialized VNFeaturePrintObservation (NSKeyedArchiver) for disk caching across sessions.
+    /// nil when the asset's thumbnail was unavailable at analysis time.
+    public let featurePrintData: Data?
+
+    // Technical Signals — populated by CoreImage filters
+    public let sharpnessScore: Double   // CIEdges brightness proxy (0.0 blurry → 1.0 sharp)
+    public let exposureBalance: Double  // Proximity of average luminance to 0.5 ideal (0.0 → 1.0)
+    public let noiseScore: Double       // Reserved; default 0.9
+
+    // Subject Signals — populated by VNDetectFaceRectanglesRequest
     public let faceCount: Int
-    public let eyesOpenRatio: Double    // Percentage of faces with eyes open (0.0 to 1.0)
-    public let smileProminence: Double  // Facial expression signal (0.0 to 1.0)
-    
+    public let eyesOpenRatio: Double    // Reserved; default 1.0
+    public let smileProminence: Double  // Reserved; default 0.5
+
     // Aesthetic Signals
-    public let compositionScore: Double // Balance & subject positioning (0.0 to 1.0)
-    public let overallQualityScore: Double // Weighted composite score
-    
+    public let compositionScore: Double // Reserved; default 0.8
+    public let overallQualityScore: Double // Weighted composite
+
     public let analysisVersion: String
     public let timestamp: Date
-    
+
     public init(
         assetID: String,
-        perceptualHash: UInt64,
-        featureVector: [Float] = [],
+        featurePrintData: Data? = nil,
         sharpnessScore: Double,
         exposureBalance: Double,
         noiseScore: Double = 0.9,
@@ -38,12 +38,11 @@ public struct PhotoAnalysis: Identifiable, Hashable, Codable {
         smileProminence: Double = 0.5,
         compositionScore: Double = 0.8,
         overallQualityScore: Double? = nil,
-        analysisVersion: String = "1.0.0",
+        analysisVersion: String = "2.0.0",
         timestamp: Date = Date()
     ) {
         self.assetID = assetID
-        self.perceptualHash = perceptualHash
-        self.featureVector = featureVector
+        self.featurePrintData = featurePrintData
         self.sharpnessScore = sharpnessScore
         self.exposureBalance = exposureBalance
         self.noiseScore = noiseScore
@@ -53,15 +52,13 @@ public struct PhotoAnalysis: Identifiable, Hashable, Codable {
         self.compositionScore = compositionScore
         self.analysisVersion = analysisVersion
         self.timestamp = timestamp
-        
+
         if let explicitScore = overallQualityScore {
             self.overallQualityScore = explicitScore
         } else {
-            // Calculate weighted quality score
             let technicalComponent = (sharpnessScore * 0.4) + (exposureBalance * 0.3) + (noiseScore * 0.3)
             let subjectComponent = faceCount > 0 ? (eyesOpenRatio * 0.7 + smileProminence * 0.3) : 0.7
             let aestheticComponent = compositionScore
-            
             self.overallQualityScore = (technicalComponent * 0.45) + (subjectComponent * 0.35) + (aestheticComponent * 0.20)
         }
     }

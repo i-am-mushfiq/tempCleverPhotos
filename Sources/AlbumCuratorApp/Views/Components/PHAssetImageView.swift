@@ -8,6 +8,7 @@ public struct PHAssetImageView: View {
     public let contentMode: ContentMode
 
     @State private var image: UIImage? = nil
+    @State private var requestID: PHImageRequestID = PHInvalidImageRequestID
 
     public init(
         localIdentifier: String?,
@@ -37,20 +38,27 @@ public struct PHAssetImageView: View {
         .task(id: localIdentifier) {
             await loadImage()
         }
+        .onDisappear {
+            // Cancel any in-flight PHImageManager request to prevent request pile-up on fast scroll
+            if requestID != PHInvalidImageRequestID {
+                PHImageManager.default().cancelImageRequest(requestID)
+                requestID = PHInvalidImageRequestID
+            }
+        }
     }
 
     private func loadImage() async {
         guard let localIdentifier = localIdentifier, !localIdentifier.isEmpty else { return }
-        
+
         let results = PHAsset.fetchAssets(withLocalIdentifiers: [localIdentifier], options: nil)
         guard let phAsset = results.firstObject else { return }
-        
+
         let options = PHImageRequestOptions()
         options.deliveryMode = .opportunistic
         options.isNetworkAccessAllowed = true
         options.isSynchronous = false
 
-        PHImageManager.default().requestImage(
+        let id = PHImageManager.default().requestImage(
             for: phAsset,
             targetSize: targetSize,
             contentMode: contentMode == .fill ? .aspectFill : .aspectFit,
@@ -61,6 +69,10 @@ public struct PHAssetImageView: View {
                     self.image = fetchedImage
                 }
             }
+        }
+
+        await MainActor.run {
+            self.requestID = id
         }
     }
 }
