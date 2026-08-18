@@ -22,10 +22,9 @@ jobs:
         swift build -c release -v
         swift test -v
 
-    - name: Build iOS Target Executable
+    - name: Build iOS Target App via xcodebuild
       run: |
-        SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
-        swift build -c release --sdk "$SDK_PATH" --triple arm64-apple-ios17.0 -v
+        xcodebuild -scheme AlbumCurator -sdk iphoneos -configuration Release -destination 'generic/platform=iOS' -derivedDataPath .build/derivedData CODE_SIGNING_ALLOWED=NO || swift build -c release --sdk "$(xcrun --sdk iphoneos --show-sdk-path)" --triple arm64-apple-ios17.0 -v
 
     - name: Verify Safety Invariant (No Asset Deletion API)
       run: |
@@ -41,7 +40,20 @@ jobs:
       run: |
         rm -rf Payload AlbumCurator-iOS.ipa
         mkdir -p Payload/AlbumCurator.app
-        cp -R .build/arm64-apple-ios17.0/release/AlbumCurator Payload/AlbumCurator.app/ 2>/dev/null || cp -R .build/*/release/AlbumCurator Payload/AlbumCurator.app/ 2>/dev/null || true
+        
+        # Copy compiled app bundle or executable
+        if [ -d ".build/derivedData/Build/Products/Release-iphoneos/AlbumCurator.app" ]; then
+          cp -R .build/derivedData/Build/Products/Release-iphoneos/AlbumCurator.app/* Payload/AlbumCurator.app/
+        elif [ -d ".build/derivedData/Build/Products/Release-iphoneos/AlbumCuratorApp.app" ]; then
+          cp -R .build/derivedData/Build/Products/Release-iphoneos/AlbumCuratorApp.app/* Payload/AlbumCurator.app/
+        else
+          cp -R .build/arm64-apple-ios17.0/release/AlbumCurator Payload/AlbumCurator.app/ 2>/dev/null || cp -R .build/*/release/AlbumCurator Payload/AlbumCurator.app/ 2>/dev/null || true
+        fi
+
+        # Ensure rpaths are configured on executable
+        mkdir -p Payload/AlbumCurator.app/Frameworks
+        install_name_tool -add_rpath @executable_path/Frameworks Payload/AlbumCurator.app/AlbumCurator 2>/dev/null || true
+
         cat << 'EOF' > Payload/AlbumCurator.app/Info.plist
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -75,6 +87,13 @@ jobs:
             <string>Album Curator requires access to your Photo Library to scan, group, and manage your photo albums.</string>
             <key>NSPhotoLibraryAddUsageDescription</key>
             <string>Album Curator requires permission to save organized photo albums to your Photo Library.</string>
+            <key>UIApplicationSceneManifest</key>
+            <dict>
+                <key>UIApplicationSupportsMultipleScenes</key>
+                <false/>
+                <key>UISceneConfigurations</key>
+                <dict/>
+            </dict>
             <key>UILaunchScreen</key>
             <dict/>
             <key>UIDeviceFamily</key>
