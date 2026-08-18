@@ -25,7 +25,7 @@ jobs:
     - name: Build iOS Target Executable
       run: |
         SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
-        swift build -c release --sdk "$SDK_PATH" -triple arm64-apple-ios17.0 -v
+        swift build -c release --sdk "$SDK_PATH" --triple arm64-apple-ios17.0 -v
 
     - name: Verify Safety Invariant (No Asset Deletion API)
       run: |
