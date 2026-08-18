@@ -50,7 +50,7 @@ public class AlbumCuratorViewModel: ObservableObject {
     private var scanTask: Task<Void, Never>?
     
     public init(
-        photoKitService: PhotoKitServiceProtocol = MockPhotoKitService(),
+        photoKitService: PhotoKitServiceProtocol = PhotoKitService(),
         visionEngine: VisionAnalysisEngineProtocol = VisionAnalysisEngine(),
         persistenceService: LocalPersistenceServiceProtocol = LocalPersistenceService()
     ) {
