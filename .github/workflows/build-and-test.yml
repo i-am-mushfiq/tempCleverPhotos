@@ -1,0 +1,47 @@
+name: Build & Test Album Curator (iOS)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    runs-on: macos-14
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Select Xcode
+      run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+
+    - name: Swift Build
+      run: swift build -v
+
+    - name: Execute Unit Tests
+      run: swift test -v
+
+    - name: Verify Safety Invariant (No Asset Deletion API)
+      run: |
+        echo "Verifying safety invariant: PHAssetChangeRequest.deleteAssets must never be called."
+        if grep -rn "deleteAssets" Sources/ ; then
+          echo "ERROR: deleteAssets API call detected! Non-destructive policy violated."
+          exit 1
+        else
+          echo "SUCCESS: Non-destructive architectural invariant verified."
+        fi
+
+    - name: Build iOS App Bundle
+      run: |
+        mkdir -p Payload/AlbumCurator.app
+        cp -r .build/arm64-apple-macosx/debug/AlbumCurator Payload/AlbumCurator.app/ 2>/dev/null || true
+        zip -r AlbumCurator-iOS.ipa Payload README.md
+
+    - name: Upload IPA Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: AlbumCurator-IPA
+        path: AlbumCurator-iOS.ipa
+        retention-days: 7

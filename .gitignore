@@ -1,0 +1,17 @@
+# Xcode
+.DS_Store
+/*.xcodeproj
+build/
+DerivedData/
+*.xcworkspace
+.build/
+
+# Swift Package Manager
+.swiftpm/
+packages/
+Package.resolved
+
+# App signing / local credentials
+*.mobileprovision
+*.cer
+*.p12

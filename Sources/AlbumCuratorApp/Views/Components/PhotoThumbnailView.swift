@@ -1,0 +1,98 @@
+import SwiftUI
+
+public struct PhotoThumbnailView: View {
+    public let asset: PhotoAsset
+    public let isKeeper: Bool
+    public let isSelectedForRemoval: Bool
+    public let onTap: () -> Void
+    
+    public init(
+        asset: PhotoAsset,
+        isKeeper: Bool,
+        isSelectedForRemoval: Bool,
+        onTap: @escaping () -> Void
+    ) {
+        self.asset = asset
+        self.isKeeper = isKeeper
+        self.isSelectedForRemoval = isSelectedForRemoval
+        self.onTap = onTap
+    }
+    
+    public var body: some View {
+        Button(action: onTap) {
+            ZStack(alignment: .topTrailing) {
+                // Photo Placeholder representation
+                ZStack(alignment: .bottomLeading) {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(LinearGradient(
+                            colors: isKeeper ? [Color.blue.opacity(0.3), Color.indigo.opacity(0.5)] : [Color.gray.opacity(0.2), Color.gray.opacity(0.4)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ))
+                        .aspectRatio(asset.aspectRatio, contentMode: .fit)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(isKeeper ? Color.blue : (isSelectedForRemoval ? Color.red : Color.gray.opacity(0.3)), lineWidth: isKeeper || isSelectedForRemoval ? 3 : 1)
+                        )
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        if let label = asset.customLabel {
+                            Text(label)
+                                .font(.caption2.bold())
+                                .foregroundColor(.white)
+                                .lineLimit(1)
+                        }
+                        if asset.isLivePhoto {
+                            HStack(spacing: 2) {
+                                Image(systemName: "livephoto")
+                                    .font(.caption2)
+                                Text("LIVE")
+                                    .font(.system(size: 9, weight: .bold))
+                            }
+                            .foregroundColor(.yellow)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 2)
+                            .background(Color.black.opacity(0.6))
+                            .clipShape(Capsule())
+                        }
+                    }
+                    .padding(6)
+                }
+                
+                // Status Overlay Badges
+                HStack(spacing: 4) {
+                    if isKeeper {
+                        HStack(spacing: 2) {
+                            Image(systemName: "star.fill")
+                                .font(.caption.bold())
+                            Text("BEST SHOT")
+                                .font(.system(size: 10, weight: .black))
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .clipShape(Capsule())
+                        .shadow(radius: 2)
+                    } else if isSelectedForRemoval {
+                        HStack(spacing: 2) {
+                            Image(systemName: "minus.circle.fill")
+                                .font(.caption.bold())
+                            Text("REMOVE")
+                                .font(.system(size: 10, weight: .bold))
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.red)
+                        .foregroundColor(.white)
+                        .clipShape(Capsule())
+                    }
+                }
+                .padding(6)
+            }
+        }
+        .buttonStyle(PlainButtonStyle())
+        .accessibilityLabel(asset.customLabel ?? "Photo \(asset.id.prefix(6))")
+        .accessibilityHint(isKeeper ? "Recommended best shot to keep in album" : (isSelectedForRemoval ? "Selected for removal from album" : "Tap to toggle selection"))
+    }
+}
