@@ -25,8 +25,19 @@ jobs:
         xcodegen generate
         sed -i '' 's/objectVersion = [0-9]*;/objectVersion = 56;/g' AlbumCurator.xcodeproj/project.pbxproj
 
-    - name: Build Swift Package Tests (macOS Host)
-      run: swift test -v
+    - name: Verify Swift Package Compiles (iOS SDK)
+      run: |
+        # swift test runs on macOS host where UIKit/Vision/Photos are unavailable.
+        # This app is iOS-only; verify compilation via xcodebuild against the simulator SDK.
+        xcodebuild build \
+          -project AlbumCurator.xcodeproj \
+          -scheme AlbumCurator \
+          -sdk iphonesimulator \
+          -destination 'platform=iOS Simulator,name=iPhone 15,OS=latest' \
+          CODE_SIGNING_ALLOWED=NO \
+          CODE_SIGNING_REQUIRED=NO \
+          -derivedDataPath .build/simDerivedData \
+          | tail -5
 
     - name: Build Native iOS App Bundle via xcodebuild
       run: |

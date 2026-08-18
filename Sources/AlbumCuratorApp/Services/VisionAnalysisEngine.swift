@@ -1,7 +1,6 @@
 import Foundation
 import Vision
 import CoreImage
-import UIKit
 import Photos
 
 // MARK: - Protocol
