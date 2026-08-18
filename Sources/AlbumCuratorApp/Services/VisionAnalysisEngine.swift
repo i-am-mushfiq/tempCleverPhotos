@@ -31,7 +31,7 @@ public class VisionAnalysisEngine: VisionAnalysisEngineProtocol {
         
         // Generate pseudo-feature vector
         var vector: [Float] = []
-        var seed = Float(hashSeed % 1000) / 1000.0
+        let seed = Float(hashSeed % 1000) / 1000.0
         for i in 0..<32 {
             let val = sin(seed * 12.9898 + Float(i) * 0.1) * 43758.5453
             vector.append(abs(val - floor(val)))

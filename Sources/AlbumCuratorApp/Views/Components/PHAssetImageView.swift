@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import Photos
 
 public struct PHAssetImageView: View {
