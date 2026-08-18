@@ -14,14 +14,16 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Select Xcode
-      run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
-
     - name: Install XcodeGen
       run: brew install xcodegen
 
-    - name: Generate Xcode Project
-      run: xcodegen generate --object-version 56
+    - name: Select Xcode 15.4
+      run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+
+    - name: Generate Xcode Project & Patch Compatibility
+      run: |
+        xcodegen generate
+        sed -i '' 's/objectVersion = [0-9]*;/objectVersion = 56;/g' AlbumCurator.xcodeproj/project.pbxproj
 
     - name: Build Swift Package Tests (macOS Host)
       run: swift test -v
