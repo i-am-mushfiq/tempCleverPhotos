@@ -33,14 +33,16 @@ jobs:
           echo "SUCCESS: Non-destructive architectural invariant verified."
         fi
 
-    - name: Package IPA / App Bundle
+    - name: Create IPA Package
       run: |
         mkdir -p Payload/AlbumCurator.app
-        cp .build/release/AlbumCurator Payload/AlbumCurator.app/ 2>/dev/null || cp .build/arm64-apple-macosx/release/AlbumCurator Payload/AlbumCurator.app/ 2>/dev/null || true
-        zip -r AlbumCurator-iOS.ipa Payload README.md
+        cp -R .build/*/release/AlbumCurator Payload/AlbumCurator.app/ 2>/dev/null || true
+        cp -R .build/*/debug/AlbumCurator Payload/AlbumCurator.app/ 2>/dev/null || true
+        zip -r AlbumCurator-iOS.ipa Payload README.md Sources
 
     - name: Upload IPA Artifact
       uses: actions/upload-artifact@v4
+      if: always()
       with:
         name: AlbumCurator-IPA
         path: AlbumCurator-iOS.ipa
