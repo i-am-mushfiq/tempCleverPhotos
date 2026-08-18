@@ -25,19 +25,24 @@ public struct AlbumListView: View {
                             }
                         }) {
                             HStack(spacing: 16) {
-                                // Thumbnail Icon Placeholder
                                 ZStack {
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .fill(LinearGradient(
-                                            colors: [.blue.opacity(0.6), .indigo.opacity(0.8)],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        ))
-                                        .frame(width: 54, height: 54)
-                                    
-                                    Image(systemName: "photo.on.rectangle.angled")
-                                        .font(.title3)
-                                        .foregroundColor(.white)
+                                    if let thumbnailID = album.thumbnailAssetID {
+                                        PHAssetImageView(localIdentifier: thumbnailID, targetSize: CGSize(width: 120, height: 120), contentMode: .fill)
+                                            .frame(width: 54, height: 54)
+                                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                                    } else {
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .fill(LinearGradient(
+                                                colors: [.blue.opacity(0.6), .indigo.opacity(0.8)],
+                                                startPoint: .topLeading,
+                                                endPoint: .bottomTrailing
+                                            ))
+                                            .frame(width: 54, height: 54)
+                                        
+                                        Image(systemName: "photo.on.rectangle.angled")
+                                            .font(.title3)
+                                            .foregroundColor(.white)
+                                    }
                                 }
                                 
                                 VStack(alignment: .leading, spacing: 4) {

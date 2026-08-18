@@ -23,17 +23,17 @@ public struct PhotoThumbnailView: View {
             ZStack(alignment: .topTrailing) {
                 // Photo Placeholder representation
                 ZStack(alignment: .bottomLeading) {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(LinearGradient(
-                            colors: isKeeper ? [Color.blue.opacity(0.3), Color.indigo.opacity(0.5)] : [Color.gray.opacity(0.2), Color.gray.opacity(0.4)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ))
-                        .aspectRatio(asset.aspectRatio, contentMode: .fit)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(isKeeper ? Color.blue : (isSelectedForRemoval ? Color.red : Color.gray.opacity(0.3)), lineWidth: isKeeper || isSelectedForRemoval ? 3 : 1)
-                        )
+                    PHAssetImageView(
+                        localIdentifier: asset.localIdentifier,
+                        targetSize: CGSize(width: 400, height: 400),
+                        contentMode: .fill
+                    )
+                    .aspectRatio(asset.aspectRatio, contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(isKeeper ? Color.blue : (isSelectedForRemoval ? Color.red : Color.gray.opacity(0.3)), lineWidth: isKeeper || isSelectedForRemoval ? 3 : 1)
+                    )
                     
                     VStack(alignment: .leading, spacing: 2) {
                         if let label = asset.customLabel {

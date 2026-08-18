@@ -55,10 +55,12 @@ public class PhotoKitService: PhotoKitServiceProtocol {
             let userAlbums = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .any, options: nil)
             userAlbums.enumerateObjects { collection, _, _ in
                 let assets = PHAsset.fetchAssets(in: collection, options: nil)
+                let coverID = assets.firstObject?.localIdentifier
                 let album = PhotoAlbum(
                     id: collection.localIdentifier,
                     title: collection.localizedTitle ?? "Untitled Album",
-                    assetCount: assets.count
+                    assetCount: assets.count,
+                    thumbnailAssetID: coverID
                 )
                 albums.append(album)
             }
@@ -67,10 +69,12 @@ public class PhotoKitService: PhotoKitServiceProtocol {
             smartAlbums.enumerateObjects { collection, _, _ in
                 let assets = PHAsset.fetchAssets(in: collection, options: nil)
                 if assets.count > 0 {
+                    let coverID = assets.firstObject?.localIdentifier
                     let album = PhotoAlbum(
                         id: collection.localIdentifier,
                         title: collection.localizedTitle ?? "Smart Album",
-                        assetCount: assets.count
+                        assetCount: assets.count,
+                        thumbnailAssetID: coverID
                     )
                     albums.append(album)
                 }
