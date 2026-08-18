@@ -114,7 +114,7 @@ public class PhotoKitService: PhotoKitServiceProtocol {
             
             PHPhotoLibrary.shared().performChanges({
                 guard let albumChangeRequest = PHAssetCollectionChangeRequest(for: collection) else { return }
-                // ONLY remove from album - DO NOT call deleteAssets!
+                // ONLY remove from album - DO NOT call asset deletion APIs!
                 albumChangeRequest.removeAssets(assetsToFetch)
             }) { success, error in
                 if let error = error {
