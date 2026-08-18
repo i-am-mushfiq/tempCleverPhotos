@@ -47,10 +47,8 @@ public class MockPhotoKitService: PhotoKitServiceProtocol {
     }
     
     public func restoreAssetsToAlbum(assetIDs: [String], albumID: String) async throws -> Bool {
-        var restoredCount = 0
         if let removed = removedAssetsLog[albumID] {
             let toRestore = removed.filter { assetIDs.contains($0) }
-            restoredCount = toRestore.count
             
             // Re-create dummy assets for restored items
             for id in toRestore {

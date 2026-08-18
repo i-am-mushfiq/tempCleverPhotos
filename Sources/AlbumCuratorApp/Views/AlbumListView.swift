@@ -75,7 +75,11 @@ public struct AlbumListView: View {
                     Text("Selecting an album will only analyze photos in that specific album. Your original Photos Library remains 100% untouched.")
                 }
             }
+            #if os(iOS)
             .listStyle(.insetGrouped)
+            #else
+            .listStyle(.automatic)
+            #endif
             .navigationTitle("Albums")
             .searchable(text: $searchText, prompt: "Search albums...")
             .toolbar {

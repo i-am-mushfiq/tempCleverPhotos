@@ -130,3 +130,33 @@ public struct ResultsSummaryView: View {
         .background(Color.appSystemGroupedBackground.ignoresSafeArea())
     }
 }
+
+public struct ConfidenceStatItem: View {
+    public let count: Int
+    public let label: String
+    public let color: Color
+    public let icon: String
+    
+    public init(count: Int, label: String, color: Color, icon: String) {
+        self.count = count
+        self.label = label
+        self.color = color
+        self.icon = icon
+    }
+    
+    public var body: some View {
+        VStack(spacing: 6) {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.caption)
+                    .foregroundColor(color)
+                Text("\(count)")
+                    .font(.title2.bold())
+            }
+            Text(label)
+                .font(.caption2)
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
