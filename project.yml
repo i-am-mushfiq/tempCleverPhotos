@@ -1,6 +1,8 @@
 name: AlbumCurator
 options:
   bundleIdPrefix: com.example
+  xcodeVersion: "15.4"
+  objectVersion: 56
   deploymentTarget:
     iOS: "17.0"
 
