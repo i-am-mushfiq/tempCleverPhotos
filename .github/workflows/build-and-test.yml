@@ -17,10 +17,11 @@ jobs:
     - name: Select Xcode
       run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
 
-    - name: Compile Package (Host & Tests)
-      run: |
-        swift build -v
-        swift test -v
+    - name: Build Swift Package & Executable
+      run: swift build -c release -v
+
+    - name: Run XCTest Suite
+      run: swift test -v
 
     - name: Verify Safety Invariant (No Asset Deletion API)
       run: |
@@ -32,14 +33,10 @@ jobs:
           echo "SUCCESS: Non-destructive architectural invariant verified."
         fi
 
-    - name: Build iOS Target Binary
-      run: |
-        swift build -c release --triple arm64-apple-ios17.0-simulator || true
-
-    - name: Package IPA Artifact
+    - name: Package IPA / App Bundle
       run: |
         mkdir -p Payload/AlbumCurator.app
-        cp -r .build/arm64-apple-ios17.0-simulator/release/AlbumCurator Payload/AlbumCurator.app/ 2>/dev/null || cp -r .build/arm64-apple-macosx/debug/AlbumCurator Payload/AlbumCurator.app/ 2>/dev/null || true
+        cp .build/release/AlbumCurator Payload/AlbumCurator.app/ 2>/dev/null || cp .build/arm64-apple-macosx/release/AlbumCurator Payload/AlbumCurator.app/ 2>/dev/null || true
         zip -r AlbumCurator-iOS.ipa Payload README.md
 
     - name: Upload IPA Artifact
