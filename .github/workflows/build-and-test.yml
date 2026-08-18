@@ -71,6 +71,12 @@ jobs:
             <true/>
             <key>MinimumOSVersion</key>
             <string>15.0</string>
+            <key>NSPhotoLibraryUsageDescription</key>
+            <string>Album Curator requires access to your Photo Library to scan, group, and manage your photo albums.</string>
+            <key>NSPhotoLibraryAddUsageDescription</key>
+            <string>Album Curator requires permission to save organized photo albums to your Photo Library.</string>
+            <key>UILaunchScreen</key>
+            <dict/>
             <key>UIDeviceFamily</key>
             <array>
                 <integer>1</integer>
