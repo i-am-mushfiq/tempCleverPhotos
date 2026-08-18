@@ -17,11 +17,15 @@ jobs:
     - name: Select Xcode
       run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
 
-    - name: Build Swift Package & Executable
-      run: swift build -c release -v
+    - name: Build Swift Package & Executable (macOS Host & Tests)
+      run: |
+        swift build -c release -v
+        swift test -v
 
-    - name: Run XCTest Suite
-      run: swift test -v
+    - name: Build iOS Target Executable
+      run: |
+        SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
+        swift build -c release --sdk "$SDK_PATH" -triple arm64-apple-ios17.0 -v
 
     - name: Verify Safety Invariant (No Asset Deletion API)
       run: |
@@ -35,32 +39,37 @@ jobs:
 
     - name: Create IPA Package
       run: |
+        rm -rf Payload AlbumCurator-iOS.ipa
         mkdir -p Payload/AlbumCurator.app
-        cp -R .build/*/release/AlbumCurator Payload/AlbumCurator.app/ 2>/dev/null || true
-        cp -R .build/*/debug/AlbumCurator Payload/AlbumCurator.app/ 2>/dev/null || true
+        cp -R .build/arm64-apple-ios17.0/release/AlbumCurator Payload/AlbumCurator.app/ 2>/dev/null || cp -R .build/*/release/AlbumCurator Payload/AlbumCurator.app/ 2>/dev/null || true
         cat << 'EOF' > Payload/AlbumCurator.app/Info.plist
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0">
-        <dict>
-            <key>CFBundleExecutable</key>
-            <string>AlbumCurator</string>
-            <key>CFBundleIdentifier</key>
-            <string>com.example.AlbumCurator</string>
-            <key>CFBundleName</key>
-            <string>AlbumCurator</string>
-            <key>CFBundlePackageType</key>
-            <string>APPL</string>
-            <key>CFBundleShortVersionString</key>
-            <string>1.0</string>
-            <key>CFBundleVersion</key>
-            <string>1</string>
-            <key>MinimumOSVersion</key>
-            <string>15.0</string>
-        </dict>
-        </plist>
-        EOF
-        zip -r AlbumCurator-iOS.ipa Payload README.md Sources
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>AlbumCurator</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.example.AlbumCurator</string>
+    <key>CFBundleName</key>
+    <string>AlbumCurator</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>MinimumOSVersion</key>
+    <string>15.0</string>
+    <key>UIDeviceFamily</key>
+    <array>
+        <integer>1</integer>
+        <integer>2</integer>
+    </array>
+</dict>
+</plist>
+EOF
+        zip -r AlbumCurator-iOS.ipa Payload
 
     - name: Upload IPA Artifact
       uses: actions/upload-artifact@v4
