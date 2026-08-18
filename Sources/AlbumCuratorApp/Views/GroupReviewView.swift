@@ -37,7 +37,7 @@ public struct GroupReviewView: View {
                 }
             }
             .padding()
-            .background(Color(uiColor: .secondarySystemGroupedBackground))
+            .background(Color.appSecondarySystemGroupedBackground)
             
             Divider()
             
@@ -100,7 +100,7 @@ public struct GroupReviewView: View {
                     Image(systemName: "chevron.left")
                         .font(.headline)
                         .frame(width: 50, height: 50)
-                        .background(Color(uiColor: .tertiarySystemFill))
+                        .background(Color.appTertiarySystemFill)
                         .clipShape(Circle())
                 }
                 .disabled(viewModel.currentReviewIndex == 0)
@@ -121,8 +121,8 @@ public struct GroupReviewView: View {
                 }
             }
             .padding()
-            .background(Color(uiColor: .secondarySystemGroupedBackground))
+            .background(Color.appSecondarySystemGroupedBackground)
         }
-        .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
+        .background(Color.appSystemGroupedBackground.ignoresSafeArea())
     }
 }

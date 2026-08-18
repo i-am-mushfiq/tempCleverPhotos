@@ -127,29 +127,6 @@ public struct ResultsSummaryView: View {
             .padding(.horizontal)
             .padding(.bottom, 24)
         }
-        .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
-    }
-}
-
-struct ConfidenceStatItem: View {
-    let count: Int
-    let label: String
-    let color: Color
-    let icon: String
-    
-    var body: some View {
-        VStack(spacing: 6) {
-            HStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.caption)
-                    .foregroundColor(color)
-                Text("\(count)")
-                    .font(.title2.bold())
-            }
-            Text(label)
-                .font(.caption2)
-                .foregroundColor(.secondary)
-        }
-        .frame(maxWidth: .infinity)
+        .background(Color.appSystemGroupedBackground.ignoresSafeArea())
     }
 }

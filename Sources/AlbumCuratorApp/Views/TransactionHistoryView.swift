@@ -55,9 +55,8 @@ public struct TransactionHistoryView: View {
                 }
             }
             .navigationTitle("Cleanup History")
-            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
                         dismiss()
                     }

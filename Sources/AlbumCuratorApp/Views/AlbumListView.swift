@@ -64,7 +64,7 @@ public struct AlbumListView: View {
                                 
                                 Image(systemName: "chevron.right")
                                     .font(.caption.bold())
-                                    .foregroundColor(.tertiaryLabel)
+                                    .foregroundColor(Color.appTertiaryLabel)
                             }
                             .padding(.vertical, 4)
                         }
@@ -79,12 +79,12 @@ public struct AlbumListView: View {
             .navigationTitle("Albums")
             .searchable(text: $searchText, prompt: "Search albums...")
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
+                ToolbarItem(placement: .automatic) {
                     Button(action: { showingHistory = true }) {
                         Image(systemName: "clock.arrow.circlepath")
                     }
                 }
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .primaryAction) {
                     Button(action: { showingSettings = true }) {
                         Image(systemName: "gearshape")
                     }

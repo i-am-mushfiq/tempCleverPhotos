@@ -88,6 +88,6 @@ public struct ConfirmationModal: View {
             .padding(.horizontal)
             .padding(.bottom, 24)
         }
-        .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
+        .background(Color.appSystemGroupedBackground.ignoresSafeArea())
     }
 }

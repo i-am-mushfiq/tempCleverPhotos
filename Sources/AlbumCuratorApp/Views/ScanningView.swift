@@ -64,6 +64,6 @@ public struct ScanningView: View {
             }
             .padding(.bottom, 16)
         }
-        .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
+        .background(Color.appSystemGroupedBackground.ignoresSafeArea())
     }
 }
