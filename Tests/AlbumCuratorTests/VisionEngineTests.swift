@@ -32,9 +32,9 @@ final class VisionEngineTests: XCTestCase {
     func testClustering_GroupsSimilarPhotosInConservativeMode() async {
         let now = Date()
         let assets = [
-            PhotoAsset(id: "img1", localIdentifier: "ph1", creationDate: now),
-            PhotoAsset(id: "img2", localIdentifier: "ph2", creationDate: now.addingTimeInterval(2)), // 2 sec
-            PhotoAsset(id: "img3", localIdentifier: "ph3", creationDate: now.addingTimeInterval(500)) // 500 sec (out of window)
+            PhotoAsset(id: "img_burst_1", localIdentifier: "ph1", creationDate: now),
+            PhotoAsset(id: "img_burst_2", localIdentifier: "ph2", creationDate: now.addingTimeInterval(2)), // 2 sec apart
+            PhotoAsset(id: "img_distinct_3", localIdentifier: "ph3", creationDate: now.addingTimeInterval(500)) // 500 sec apart
         ]
         
         let (clusters, _) = await visionEngine.analyzeAndCluster(
@@ -46,9 +46,9 @@ final class VisionEngineTests: XCTestCase {
         
         XCTAssertFalse(clusters.isEmpty, "Should form at least one cluster for nearby photos")
         if let firstCluster = clusters.first {
-            XCTAssertTrue(firstCluster.assetIDs.contains("img1"))
-            XCTAssertTrue(firstCluster.assetIDs.contains("img2"))
-            XCTAssertFalse(firstCluster.assetIDs.contains("img3"), "Photo 500 sec apart should be excluded in conservative mode")
+            XCTAssertTrue(firstCluster.assetIDs.contains("img_burst_1"))
+            XCTAssertTrue(firstCluster.assetIDs.contains("img_burst_2"))
+            XCTAssertFalse(firstCluster.assetIDs.contains("img_distinct_3"), "Photo 500 sec apart should be excluded in conservative mode")
         }
     }
     

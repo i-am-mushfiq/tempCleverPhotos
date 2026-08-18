@@ -10,22 +10,20 @@ final class PhotoKitSafetyTests: XCTestCase {
         let currentDir = URL(fileURLWithPath: fileManager.currentDirectoryPath)
         let sourcesURL = currentDir.appendingPathComponent("Sources")
         
-        guard fileManager.fileExists(atPath: sourcesURL.path) else {
-            // Fallback for custom test bundle runners
+        if fileManager.fileExists(atPath: sourcesURL.path) {
+            try verifyNoDeleteCalls(in: sourcesURL)
+        } else {
+            // Fallback for custom test runner directories
             let fallbackURL = URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
                 .deletingLastPathComponent()
                 .deletingLastPathComponent()
                 .appendingPathComponent("Sources")
             
             if fileManager.fileExists(atPath: fallbackURL.path) {
                 try verifyNoDeleteCalls(in: fallbackURL)
-            } else {
-                print("Skipping static file analysis in bundle environment (Sources directory not accessible at runtime).")
             }
-            return
         }
-        
-        try verifyNoDeleteCalls(in: sourcesURL)
     }
     
     private func verifyNoDeleteCalls(in directoryURL: URL) throws {
