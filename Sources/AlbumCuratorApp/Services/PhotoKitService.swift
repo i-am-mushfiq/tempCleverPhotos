@@ -9,6 +9,7 @@ public enum PhotosAuthorizationState: String {
 }
 
 public protocol PhotoKitServiceProtocol {
+    func checkAuthorizationStatus() -> PhotosAuthorizationState
     func requestAuthorization() async -> PhotosAuthorizationState
     func fetchAlbums() async -> [PhotoAlbum]
     func fetchAssets(in albumID: String) async -> [PhotoAsset]
@@ -25,6 +26,17 @@ public protocol PhotoKitServiceProtocol {
 public class PhotoKitService: PhotoKitServiceProtocol {
     public init() {}
     
+    public func checkAuthorizationStatus() -> PhotosAuthorizationState {
+        let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        switch status {
+        case .authorized: return .authorized
+        case .limited: return .limited
+        case .denied, .restricted: return .denied
+        case .notDetermined: return .notDetermined
+        @unknown default: return .denied
+        }
+    }
+
     public func requestAuthorization() async -> PhotosAuthorizationState {
         let status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
         switch status {

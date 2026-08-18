@@ -65,6 +65,17 @@ public class AlbumCuratorViewModel: ObservableObject {
     }
     
     // Authorization
+    public func checkAuthorizationOnLaunch() async {
+        let status = photoKitService.checkAuthorizationStatus()
+        self.authorizationState = status
+        if status == .authorized || status == .limited {
+            await loadAlbums()
+            self.navigationState = .albumList
+        } else {
+            self.navigationState = .onboarding
+        }
+    }
+
     public func checkAndRequestAuthorization() async {
         let status = await photoKitService.requestAuthorization()
         self.authorizationState = status

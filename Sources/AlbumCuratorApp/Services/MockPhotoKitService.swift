@@ -10,6 +10,10 @@ public class MockPhotoKitService: PhotoKitServiceProtocol {
         setupDefaultMockData()
     }
     
+    public func checkAuthorizationStatus() -> PhotosAuthorizationState {
+        return .authorized
+    }
+    
     public func requestAuthorization() async -> PhotosAuthorizationState {
         return .authorized
     }

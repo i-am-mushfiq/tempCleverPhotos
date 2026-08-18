@@ -8,7 +8,7 @@ struct AlbumCuratorApp: App {
         WindowGroup {
             MainContentView(viewModel: viewModel)
                 .task {
-                    await viewModel.checkAndRequestAuthorization()
+                    await viewModel.checkAuthorizationOnLaunch()
                 }
         }
     }
