@@ -8,6 +8,11 @@ public protocol LocalPersistenceServiceProtocol {
     func loadSimilarityMode() -> SimilarityMode
     func saveSimilarityMode(_ mode: SimilarityMode)
     func clearCache()
+
+    /// Per-album "last analyzed" timestamps, keyed by PhotoAlbum.id.
+    /// PhotoKit has no native concept of this, so the app tracks it locally.
+    func loadLastAnalyzedDates() -> [String: Date]
+    func saveLastAnalyzedDate(_ date: Date, forAlbumID albumID: String)
 }
 
 public class LocalPersistenceService: LocalPersistenceServiceProtocol {
@@ -17,6 +22,7 @@ public class LocalPersistenceService: LocalPersistenceServiceProtocol {
     private var analysesURL: URL { baseURL.appendingPathComponent("analyses_cache.json") }
     private var transactionsURL: URL { baseURL.appendingPathComponent("transactions_log.json") }
     private var settingsURL: URL { baseURL.appendingPathComponent("user_settings.json") }
+    private var lastAnalyzedDatesURL: URL { baseURL.appendingPathComponent("album_last_analyzed.json") }
     
     public init(storageDirectory: URL? = nil) {
         if let dir = storageDirectory {
@@ -74,5 +80,20 @@ public class LocalPersistenceService: LocalPersistenceServiceProtocol {
     
     public func clearCache() {
         try? fileManager.removeItem(at: analysesURL)
+    }
+
+    public func loadLastAnalyzedDates() -> [String: Date] {
+        guard let data = try? Data(contentsOf: lastAnalyzedDatesURL),
+              let decoded = try? JSONDecoder().decode([String: Date].self, from: data) else {
+            return [:]
+        }
+        return decoded
+    }
+
+    public func saveLastAnalyzedDate(_ date: Date, forAlbumID albumID: String) {
+        var dates = loadLastAnalyzedDates()
+        dates[albumID] = date
+        guard let data = try? JSONEncoder().encode(dates) else { return }
+        try? data.write(to: lastAnalyzedDatesURL, options: .atomic)
     }
 }

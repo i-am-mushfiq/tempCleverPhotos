@@ -1,8 +1,9 @@
 import Foundation
 
 /// Detailed analysis output for a photo asset combining perceptual, visual, and quality signals.
-/// analysisVersion "2.0.0" uses real Vision.framework feature prints; older cached entries are discarded.
-public struct PhotoAnalysis: Identifiable, Hashable, Codable {
+/// analysisVersion "3.0.0" adds measured noise, eye-openness, smile, and composition signals
+/// (previously hardcoded placeholders); older cached entries are discarded and re-analyzed.
+public struct PhotoAnalysis: Identifiable, Hashable, Codable, Sendable {
     public var id: String { assetID }
     public let assetID: String
 
@@ -13,15 +14,15 @@ public struct PhotoAnalysis: Identifiable, Hashable, Codable {
     // Technical Signals — populated by CoreImage filters
     public let sharpnessScore: Double   // CIEdges brightness proxy (0.0 blurry → 1.0 sharp)
     public let exposureBalance: Double  // Proximity of average luminance to 0.5 ideal (0.0 → 1.0)
-    public let noiseScore: Double       // Reserved; default 0.9
+    public let noiseScore: Double       // CINoiseReduction residual proxy (0.0 noisy → 1.0 clean)
 
-    // Subject Signals — populated by VNDetectFaceRectanglesRequest
+    // Subject Signals — populated by VNDetectFaceLandmarksRequest
     public let faceCount: Int
-    public let eyesOpenRatio: Double    // Reserved; default 1.0
-    public let smileProminence: Double  // Reserved; default 0.5
+    public let eyesOpenRatio: Double    // Eye-contour aspect ratio proxy (0.0 closed → 1.0 open)
+    public let smileProminence: Double  // Mouth-corner lift proxy (0.0 neutral/frown → 1.0 broad smile)
 
     // Aesthetic Signals
-    public let compositionScore: Double // Reserved; default 0.8
+    public let compositionScore: Double // Rule-of-thirds proximity of the salient subject (VNGenerateAttentionBasedSaliencyImageRequest)
     public let overallQualityScore: Double // Weighted composite
 
     public let analysisVersion: String
@@ -38,7 +39,7 @@ public struct PhotoAnalysis: Identifiable, Hashable, Codable {
         smileProminence: Double = 0.5,
         compositionScore: Double = 0.8,
         overallQualityScore: Double? = nil,
-        analysisVersion: String = "2.0.0",
+        analysisVersion: String = "3.0.0",
         timestamp: Date = Date()
     ) {
         self.assetID = assetID

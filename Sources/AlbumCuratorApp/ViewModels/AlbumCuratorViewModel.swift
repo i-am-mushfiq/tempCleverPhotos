@@ -96,7 +96,12 @@ public class AlbumCuratorViewModel: ObservableObject {
 
     public func loadAlbums() async {
         let fetched = await photoKitService.fetchAlbums()
-        self.albums = fetched
+        let lastAnalyzedDates = persistenceService.loadLastAnalyzedDates()
+        self.albums = fetched.map { album in
+            var album = album
+            album.lastAnalyzedDate = lastAnalyzedDates[album.id]
+            return album
+        }
     }
 
     // MARK: - Select & Start Scanning
@@ -131,6 +136,17 @@ public class AlbumCuratorViewModel: ObservableObject {
             self.clusters = resultClusters
             self.currentReviewIndex = 0
             self.isScanning = false
+
+            let analyzedDate = Date()
+            self.persistenceService.saveLastAnalyzedDate(analyzedDate, forAlbumID: album.id)
+            if var updatedSelectedAlbum = self.selectedAlbum, updatedSelectedAlbum.id == album.id {
+                updatedSelectedAlbum.lastAnalyzedDate = analyzedDate
+                self.selectedAlbum = updatedSelectedAlbum
+            }
+            if let index = self.albums.firstIndex(where: { $0.id == album.id }) {
+                self.albums[index].lastAnalyzedDate = analyzedDate
+            }
+
             self.navigationState = .resultsSummary
         }
     }
