@@ -38,7 +38,7 @@ It analyzes photos contained within a selected album, groups visually and tempor
 
 6. **No-Mac Sideloading CI/CD Workflow**:
    - Complete `.github/workflows/build-and-test.yml` GitHub Actions pipeline for compiling and executing automated tests via macOS runners.
-   - By default (no signing secrets configured) it produces an **unsigned** `.ipa` — you re-sign it yourself (e.g. via [Sideloadly](https://sideloadly.io/) with a personal Apple ID) before installing on a device. If you add your own personal Apple Developer certificate + provisioning profile as repo secrets, CI hands you back an already-**signed**, installable `.ipa` directly. See [CI/CD Pipeline](#github-actions-cicd-pipeline) below for the required secret names.
+   - Produces an **unsigned** `.ipa` — re-sign it yourself (e.g. via [Sideloadly](https://sideloadly.io/) with a personal Apple ID) before installing on a device.
 
 ---
 
@@ -114,18 +114,6 @@ Pushing changes to `main` triggers `.github/workflows/build-and-test.yml` on a G
 2. Compiles the app target via `xcodegen` + `xcodebuild` against the iOS Simulator SDK.
 3. Verifies the safety invariant using static analysis (`grep -rn "deleteAssets" Sources/`).
 4. Verifies the real Vision engine is wired in (`grep -rn "VNGenerateImageFeaturePrintRequest" Sources/`).
-5. Builds a release `.ipa` for `iphoneos`:
-   - **Unsigned** by default — you re-sign it yourself before installing (e.g. via Sideloadly + a personal Apple ID).
-   - **Signed**, if you add these repository secrets from your own Apple Developer account:
+5. Builds a release `.ipa` for `iphoneos` and uploads it as `AlbumCurator-IPA-unsigned` — it is **not signed**, so it can't be installed as-is; re-sign it yourself before installing (e.g. via Sideloadly + a personal Apple ID).
 
-     | Secret | Description |
-     |---|---|
-     | `IOS_DIST_CERTIFICATE_BASE64` | Your distribution/development `.p12` certificate, base64-encoded (`base64 -i cert.p12`). |
-     | `IOS_DIST_CERTIFICATE_PASSWORD` | Password protecting that `.p12`. |
-     | `IOS_PROVISIONING_PROFILE_BASE64` | Your `.mobileprovision` file, base64-encoded. |
-     | `IOS_DEVELOPMENT_TEAM` | Your 10-character Apple Developer Team ID. |
-     | `IOS_CODE_SIGN_IDENTITY` | e.g. `Apple Development` or `iPhone Distribution`. |
-     | `IOS_PROVISIONING_PROFILE_NAME` | The profile's name (as shown in the profile itself), used as `PROVISIONING_PROFILE_SPECIFIER`. |
-     | `IOS_KEYCHAIN_PASSWORD` *(optional)* | Password for the temporary CI keychain; a random one is generated per run if omitted. |
-
-   The resulting artifact is uploaded as `AlbumCurator-IPA-signed` or `AlbumCurator-IPA-unsigned` depending on which path ran.
+   An earlier version of this pipeline attempted an optional path that would produce an already-signed IPA when personal Apple Developer signing secrets were configured. That step caused GitHub Actions to reject the entire workflow file (every run silently produced zero jobs, with no logs or error surfaced anywhere) for reasons that weren't fully diagnosed, so it's been removed for now in favor of a pipeline that reliably runs.
