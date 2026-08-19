@@ -2,7 +2,12 @@ import SwiftUI
 
 public struct GroupReviewView: View {
     @ObservedObject var viewModel: AlbumCuratorViewModel
-    
+
+    private struct PreviewTarget: Identifiable {
+        let id: String
+    }
+    @State private var previewTarget: PreviewTarget?
+
     var currentCluster: PhotoCluster? {
         guard viewModel.currentReviewIndex < viewModel.clusters.count else { return nil }
         return viewModel.clusters[viewModel.currentReviewIndex]
@@ -45,23 +50,26 @@ public struct GroupReviewView: View {
             if let cluster = currentCluster {
                 ScrollView {
                     VStack(spacing: 20) {
-                        Text("Tap photos to toggle between Keeping in Album vs. Removal from Album.")
+                        Text("Tap photos to toggle between Keeping in Album vs. Removal from Album. Touch and hold to preview full screen.")
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .padding(.top, 12)
-                        
+
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 16)], spacing: 16) {
                             ForEach(cluster.assetIDs, id: \.self) { assetID in
                                 if let asset = viewModel.assetMap[assetID] {
                                     let isKeeper = cluster.isKeeper(assetID)
                                     let isRemoval = cluster.isCandidateForRemoval(assetID)
-                                    
+
                                     PhotoThumbnailView(
                                         asset: asset,
                                         isKeeper: isKeeper,
                                         isSelectedForRemoval: isRemoval,
                                         onTap: {
                                             viewModel.toggleKeeperInCurrentCluster(assetID: assetID)
+                                        },
+                                        onLongPress: {
+                                            previewTarget = PreviewTarget(id: assetID)
                                         }
                                     )
                                 }
@@ -124,5 +132,12 @@ public struct GroupReviewView: View {
             .background(Color.appSecondarySystemGroupedBackground)
         }
         .background(Color.appSystemGroupedBackground.ignoresSafeArea())
+        .fullScreenCover(item: $previewTarget) { target in
+            PhotoZoomPreviewView(
+                assetIDs: currentCluster?.assetIDs ?? [target.id],
+                assetMap: viewModel.assetMap,
+                initialAssetID: target.id
+            )
+        }
     }
 }
