@@ -33,6 +33,12 @@ public class AlbumCuratorViewModel: ObservableObject {
     @Published public var similarityMode: SimilarityMode = .balanced {
         didSet {
             persistenceService.saveSimilarityMode(similarityMode)
+            // Re-cluster the already-analyzed photos under the new mode. This is cheap —
+            // Phase 2/3 of analyzeAndCluster run entirely off cached feature prints, no
+            // Vision re-analysis needed — so switching modes on the results screen updates
+            // the groups immediately instead of silently doing nothing until the next scan.
+            let requestedMode = similarityMode
+            Task { await self.recluster(with: requestedMode) }
         }
     }
     @Published public var clusters: [PhotoCluster] = []
@@ -155,6 +161,27 @@ public class AlbumCuratorViewModel: ObservableObject {
         scanTask?.cancel()
         isScanning = false
         navigationState = .albumList
+    }
+
+    /// Re-groups the current album's already-analyzed photos under `mode` without
+    /// re-running Vision analysis. Passing `cachedAnalyses` back in means every asset
+    /// is already at `currentVersion`, so analyzeAndCluster's Phase 1 finds nothing to
+    /// (re-)analyze and goes straight to the cheap clustering phases.
+    private func recluster(with mode: SimilarityMode) async {
+        guard !selectedAlbumAssets.isEmpty else { return }
+
+        let (resultClusters, _) = await visionEngine.analyzeAndCluster(
+            assets: selectedAlbumAssets,
+            cachedAnalyses: cachedAnalyses,
+            mode: mode,
+            progressHandler: { _, _, _ in }
+        )
+
+        // Discard a stale result if the user changed modes again before this finished.
+        guard mode == similarityMode else { return }
+
+        self.clusters = resultClusters
+        self.currentReviewIndex = 0
     }
 
     // MARK: - Bulk Approval (FR-012)
