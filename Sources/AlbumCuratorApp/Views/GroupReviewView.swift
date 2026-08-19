@@ -12,7 +12,45 @@ public struct GroupReviewView: View {
         guard viewModel.currentReviewIndex < viewModel.clusters.count else { return nil }
         return viewModel.clusters[viewModel.currentReviewIndex]
     }
-    
+
+    /// Per-asset "why" caption for the current cluster, grounded in the actual
+    /// measured signals rather than just showing a badge with no explanation.
+    var currentClusterReasons: [String: String] {
+        guard let cluster = currentCluster,
+              let primaryKeeperID = cluster.recommendedKeepers.first,
+              let keeperAnalysis = viewModel.analysis(for: primaryKeeperID) else {
+            return [:]
+        }
+
+        var reasons: [String: String] = [:]
+
+        let removalAnalyses = cluster.candidatesForRemoval.compactMap { id -> (String, PhotoAnalysis)? in
+            guard let analysis = viewModel.analysis(for: id) else { return nil }
+            return (id, analysis)
+        }
+
+        if let weakest = removalAnalyses.min(by: { $0.1.overallQualityScore < $1.1.overallQualityScore })?.1 {
+            reasons[primaryKeeperID] = RecommendationExplainer.keeperReason(keeper: keeperAnalysis, weakestOther: weakest)
+        }
+
+        for (id, analysis) in removalAnalyses {
+            reasons[id] = RecommendationExplainer.removalReason(candidate: analysis, keeper: keeperAnalysis)
+        }
+
+        // Any keeper beyond the first only happens via the Live Photo companion rule
+        // (unless the user has manually kept extra photos) — see rankAndCreateCluster.
+        for extraKeeperID in cluster.recommendedKeepers.dropFirst() {
+            if !cluster.isUserOverridden, viewModel.assetMap[extraKeeperID]?.isLivePhoto == true {
+                reasons[extraKeeperID] = "Live Photo pair — kept together"
+            } else {
+                reasons[extraKeeperID] = "Manually kept"
+            }
+        }
+
+        return reasons
+    }
+
+
     public var body: some View {
         VStack(spacing: 0) {
             // Top Bar
@@ -70,7 +108,8 @@ public struct GroupReviewView: View {
                                         },
                                         onLongPress: {
                                             previewTarget = PreviewTarget(id: assetID)
-                                        }
+                                        },
+                                        reasonText: currentClusterReasons[assetID]
                                     )
                                 }
                             }

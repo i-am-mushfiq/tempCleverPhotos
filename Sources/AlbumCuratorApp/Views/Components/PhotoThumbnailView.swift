@@ -6,22 +6,59 @@ public struct PhotoThumbnailView: View {
     public let isSelectedForRemoval: Bool
     public let onTap: () -> Void
     public let onLongPress: (() -> Void)?
+    /// Short, grounded explanation of why this photo was scored as keeper/removal
+    /// (e.g. "Sharpest in this group") — nil when not applicable or not computed.
+    public let reasonText: String?
 
     public init(
         asset: PhotoAsset,
         isKeeper: Bool,
         isSelectedForRemoval: Bool,
         onTap: @escaping () -> Void,
-        onLongPress: (() -> Void)? = nil
+        onLongPress: (() -> Void)? = nil,
+        reasonText: String? = nil
     ) {
         self.asset = asset
         self.isKeeper = isKeeper
         self.isSelectedForRemoval = isSelectedForRemoval
         self.onTap = onTap
         self.onLongPress = onLongPress
+        self.reasonText = reasonText
     }
 
     public var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            photoContent
+
+            if let reasonText, !reasonText.isEmpty {
+                HStack(spacing: 4) {
+                    Image(systemName: "info.circle")
+                    Text(reasonText)
+                        .lineLimit(2)
+                }
+                .font(.caption2)
+                .foregroundColor(.secondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(asset.customLabel ?? "Photo \(asset.id.prefix(6))")
+        .accessibilityHint(accessibilityHintText)
+        .accessibilityAction {
+            onTap()
+        }
+    }
+
+    private var accessibilityHintText: String {
+        var hint = isKeeper ? "Recommended best shot to keep in album" : (isSelectedForRemoval ? "Selected for removal from album" : "Tap to toggle selection")
+        hint += ". Touch and hold to preview full screen."
+        if let reasonText, !reasonText.isEmpty {
+            hint += " Reason: \(reasonText)."
+        }
+        return hint
+    }
+
+    private var photoContent: some View {
         // Plain tap + long-press gestures rather than wrapping this in a Button:
         // a Button's own tap action can still fire right after a long-press release,
         // which would toggle the keeper state at the same moment the zoom preview
@@ -103,7 +140,6 @@ public struct PhotoThumbnailView: View {
         .onLongPressGesture(minimumDuration: 0.4) {
             onLongPress?()
         }
-        .accessibilityLabel(asset.customLabel ?? "Photo \(asset.id.prefix(6))")
-        .accessibilityHint(isKeeper ? "Recommended best shot to keep in album" : (isSelectedForRemoval ? "Selected for removal from album" : "Tap to toggle selection. Touch and hold to preview full screen."))
+        .accessibilityHidden(true) // the outer VStack provides a single combined accessibility element
     }
 }

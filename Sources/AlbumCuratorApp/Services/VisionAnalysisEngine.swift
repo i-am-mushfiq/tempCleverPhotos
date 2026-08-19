@@ -552,6 +552,46 @@ public final class VisionAnalysisEngine: VisionAnalysisEngineProtocol, @unchecke
             }
         }
 
+        // ── Phase 4: Cross-time duplicate detection ────────────────────────────────
+        // The windowed pass above only ever compares photos within the current mode's
+        // time window, so a genuine duplicate re-imported, re-saved from another app,
+        // or otherwise re-added months apart is never even compared — only same-moment
+        // bursts get caught. This pass ignores time entirely, but — since there's no
+        // temporal corroboration to lean on — uses a much stricter distance threshold
+        // than any similarity mode (near-exact-duplicate confidence, not "similar
+        // scene") to avoid merging two unrelated photos that just happen to look alike.
+        //
+        // A full ignore-time comparison is inherently all-pairs, but bucketing by pixel
+        // dimensions first keeps it cheap in practice: a genuine duplicate is almost
+        // always the same original file (possibly re-exported), so it shares exact
+        // dimensions with its match, and only needs comparing against other photos in
+        // the same bucket rather than the whole album.
+        let duplicateDistanceThreshold: Float = 0.2
+        var dimensionBuckets: [String: [Int]] = [:]
+        for i in sortedAssets.indices {
+            let asset = sortedAssets[i]
+            dimensionBuckets["\(asset.pixelWidth)x\(asset.pixelHeight)", default: []].append(i)
+        }
+
+        for (_, indices) in dimensionBuckets where indices.count > 1 {
+            for a in indices.indices {
+                let i = indices[a]
+                guard let fp1 = featurePrints[sortedAssets[i].id] else { continue }
+
+                for b in (a + 1)..<indices.count {
+                    let j = indices[b]
+                    guard unionFind.find(i) != unionFind.find(j) else { continue }
+                    guard let fp2 = featurePrints[sortedAssets[j].id] else { continue }
+
+                    var distance: Float = 1.0
+                    try? fp1.computeDistance(&distance, to: fp2)
+                    if distance < duplicateDistanceThreshold {
+                        unionFind.union(i, j)
+                    }
+                }
+            }
+        }
+
         var groupedIndices: [Int: [Int]] = [:]
         for i in sortedAssets.indices {
             groupedIndices[unionFind.find(i), default: []].append(i)

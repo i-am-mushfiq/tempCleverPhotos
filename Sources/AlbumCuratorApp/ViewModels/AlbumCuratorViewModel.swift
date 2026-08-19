@@ -184,6 +184,12 @@ public class AlbumCuratorViewModel: ObservableObject {
         self.currentReviewIndex = 0
     }
 
+    /// The measured quality signals for a given asset, if it's been analyzed. Lets
+    /// views explain *why* a recommendation was made instead of just showing a badge.
+    public func analysis(for assetID: String) -> PhotoAnalysis? {
+        cachedAnalyses[assetID]
+    }
+
     // MARK: - Bulk Approval (FR-012)
 
     /// Marks all non-high-confidence clusters as skipped so only .high clusters
