@@ -53,68 +53,9 @@ jobs:
           -derivedDataPath .build/simDerivedData \
           | tail -5
 
-    - name: Import Code-Signing Certificate & Provisioning Profile
-      id: import_signing
-      if: ${{ secrets.IOS_DIST_CERTIFICATE_BASE64 != '' && secrets.IOS_DIST_CERTIFICATE_PASSWORD != '' && secrets.IOS_PROVISIONING_PROFILE_BASE64 != '' }}
-      env:
-        CERTIFICATE_BASE64: ${{ secrets.IOS_DIST_CERTIFICATE_BASE64 }}
-        CERTIFICATE_PASSWORD: ${{ secrets.IOS_DIST_CERTIFICATE_PASSWORD }}
-        PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
-        KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
-      run: |
-        # Optional path: only runs when a personal Apple Developer certificate +
-        # provisioning profile have been added as repo secrets. Without these secrets
-        # (the default for anyone forking this repo), the pipeline falls back to
-        # producing an UNSIGNED .ipa further down — see README for the required
-        # secret names if you want CI to hand you an installable, signed build.
-        CERT_PATH="$RUNNER_TEMP/dist_cert.p12"
-        PROFILE_PATH="$RUNNER_TEMP/profile.mobileprovision"
-        KEYCHAIN_PATH="$RUNNER_TEMP/ci-signing.keychain-db"
-        EFFECTIVE_KEYCHAIN_PASSWORD="${KEYCHAIN_PASSWORD:-ci-ephemeral-$GITHUB_RUN_ID}"
-
-        echo -n "$CERTIFICATE_BASE64" | base64 --decode -o "$CERT_PATH"
-        echo -n "$PROFILE_BASE64" | base64 --decode -o "$PROFILE_PATH"
-
-        security create-keychain -p "$EFFECTIVE_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-        security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-        security unlock-keychain -p "$EFFECTIVE_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-        security import "$CERT_PATH" -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-        security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed 's/"//g')
-        security set-key-partition-list -S apple-tool:,apple:,codesign: -k "$EFFECTIVE_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-        mkdir -p ~/Library/MobileDevice/"Provisioning Profiles"
-        cp "$PROFILE_PATH" ~/Library/MobileDevice/"Provisioning Profiles"/
-
-        echo "configured=true" >> "$GITHUB_OUTPUT"
-
     - name: Build Native iOS App Bundle via xcodebuild
-      env:
-        DEVELOPMENT_TEAM: ${{ secrets.IOS_DEVELOPMENT_TEAM }}
-        CODE_SIGN_IDENTITY: ${{ secrets.IOS_CODE_SIGN_IDENTITY }}
-        PROVISIONING_PROFILE_SPECIFIER: ${{ secrets.IOS_PROVISIONING_PROFILE_NAME }}
       run: |
-        if [ "${{ steps.import_signing.outputs.configured }}" = "true" ]; then
-          echo "Signing secrets present — building a SIGNED release IPA."
-          xcodebuild -project AlbumCurator.xcodeproj -scheme AlbumCurator -sdk iphoneos -configuration Release \
-            -destination 'generic/platform=iOS' \
-            CODE_SIGNING_ALLOWED=YES \
-            CODE_SIGNING_REQUIRED=YES \
-            CODE_SIGN_STYLE=Manual \
-            DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
-            CODE_SIGN_IDENTITY="$CODE_SIGN_IDENTITY" \
-            PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_SPECIFIER" \
-            -derivedDataPath .build/derivedData
-          echo "IPA_SIGNED=true" >> "$GITHUB_ENV"
-        else
-          echo "No signing secrets configured — building an UNSIGNED release IPA."
-          echo "You must re-sign it yourself (e.g. via Sideloadly + a personal Apple ID) before it can be installed on a device."
-          xcodebuild -project AlbumCurator.xcodeproj -scheme AlbumCurator -sdk iphoneos -configuration Release \
-            -destination 'generic/platform=iOS' \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            -derivedDataPath .build/derivedData
-          echo "IPA_SIGNED=false" >> "$GITHUB_ENV"
-        fi
+        xcodebuild -project AlbumCurator.xcodeproj -scheme AlbumCurator -sdk iphoneos -configuration Release -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO -derivedDataPath .build/derivedData
 
     - name: Verify Safety Invariant (No Asset Deletion API)
       run: |
@@ -147,6 +88,6 @@ jobs:
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: AlbumCurator-IPA-${{ env.IPA_SIGNED == 'true' && 'signed' || 'unsigned' }}
+        name: AlbumCurator-IPA-unsigned
         path: AlbumCurator-iOS.ipa
         retention-days: 7
