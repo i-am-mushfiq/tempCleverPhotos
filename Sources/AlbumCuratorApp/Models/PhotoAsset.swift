@@ -3,7 +3,7 @@ import Photos
 
 /// Represents an individual photo asset within an album.
 /// Enforces atomic handling of Live Photos as specified in FR-005.
-public struct PhotoAsset: Identifiable, Hashable, Codable {
+public struct PhotoAsset: Identifiable, Hashable, Codable, Sendable {
     public let id: String
     public let localIdentifier: String
     public let creationDate: Date?

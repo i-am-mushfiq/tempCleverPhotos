@@ -37,7 +37,8 @@ It analyzes photos contained within a selected album, groups visually and tempor
    - Incremental local JSON caching speeds up subsequent scans.
 
 6. **No-Mac Sideloading CI/CD Workflow**:
-   - Complete `.github/workflows/build-and-test.yml` GitHub Actions pipeline for compiling, executing automated tests, and signing binaries via macOS runners for personal sideloading on iPhone.
+   - Complete `.github/workflows/build-and-test.yml` GitHub Actions pipeline for compiling and executing automated tests via macOS runners.
+   - Produces an **unsigned** `.ipa` — re-sign it yourself (e.g. via [Sideloadly](https://sideloadly.io/) with a personal Apple ID) before installing on a device.
 
 ---
 
@@ -96,16 +97,23 @@ tempCleverPhotos/
 
 ### Automated Testing (Swift PM)
 
-Run unit tests directly:
+`swift test` runs against the **macOS host** toolchain by default, but two source files
+(`PHAssetImageView.swift`, `ColorExtensions.swift`) import `UIKit`, which isn't available
+outside iOS/Mac Catalyst — so a plain `swift test` invocation will fail to compile on a
+Mac that isn't running Catalyst. Instead, build and run the suite against the iOS
+Simulator SDK:
 
 ```bash
-swift test
+xcodebuild test -scheme AlbumCurator -destination 'platform=iOS Simulator,name=iPhone 15,OS=latest'
 ```
 
 ### GitHub Actions CI/CD Pipeline
 
 Pushing changes to `main` triggers `.github/workflows/build-and-test.yml` on a GitHub-hosted `macos-14` runner which:
-1. Compiles the Swift package.
-2. Executes the full XCTest suite.
+1. Builds and runs the full XCTest suite against the iOS Simulator SDK (this is the real test gate — a failing or non-compiling test fails the job).
+2. Compiles the app target via `xcodegen` + `xcodebuild` against the iOS Simulator SDK.
 3. Verifies the safety invariant using static analysis (`grep -rn "deleteAssets" Sources/`).
-4. Generates signed iOS builds for personal sideloading.
+4. Verifies the real Vision engine is wired in (`grep -rn "VNGenerateImageFeaturePrintRequest" Sources/`).
+5. Builds a release `.ipa` for `iphoneos` and uploads it as `AlbumCurator-IPA-unsigned` — it is **not signed**, so it can't be installed as-is; re-sign it yourself before installing (e.g. via Sideloadly + a personal Apple ID).
+
+   An earlier version of this pipeline attempted an optional path that would produce an already-signed IPA when personal Apple Developer signing secrets were configured. That step caused GitHub Actions to reject the entire workflow file (every run silently produced zero jobs, with no logs or error surfaced anywhere) for reasons that weren't fully diagnosed, so it's been removed for now in favor of a pipeline that reliably runs.
